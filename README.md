@@ -60,7 +60,7 @@ Use your actual section, entry type, and field handles. The plugin does not crea
 
 Mappings support dot-separated API paths and preserve the API values, including nulls, booleans, arrays, and ISO dates. Choose compatible field types: Date fields for dates, Lightswitch for `is_continuous`, Number for counts, and text fields for descriptions, URLs, and location text. The API's `start_time` and `end_time` are time-only strings; map them to Plain Text fields. Nullable values need optional fields. When mapping an entire object or array, its structure must match the destination field's input format.
 
-When `imagesField` is configured, course images are downloaded into that Assets field's configured upload location. Identical images already attached to the entry are reused. Old assets are unlinked when removed from the API response; their files remain in the volume.
+When `imagesField` is configured, course images are downloaded into that Assets field's configured upload location. Images are matched by a SHA-256 hash of their contents against attached assets and existing assets in the same upload folder, including assets no longer attached to an entry. Duplicate images in one response are linked only once, and entries using the same upload folder can share assets. Existing upload-folder assets are indexed once per importer service instance; newly imported assets are added immediately. Old assets are unlinked when removed from the API response; their files remain in the volume. Existing duplicate assets are not deleted.
 
 Settings use Craft's standard [plugin configuration](https://craftcms.com/docs/5.x/extend/plugin-settings.html).
 
@@ -70,7 +70,7 @@ Settings use Craft's standard [plugin configuration](https://craftcms.com/docs/5
 php craft hzt/import
 ```
 
-The importer fetches all pages from `GET /api/v1/events` before saving entries. The API currently returns published, upcoming events with their course information, images, location, and effective schedule. Entries are matched by the configured HZT ID field, within the configured section and entry type. New entries are enabled; existing entries retain their enabled state. Unmapped fields remain untouched. Entry queries use Craft's current site, which is normally the primary site in the CLI.
+The importer fetches all pages from `GET /api/v1/events` before saving entries, with a hard limit of 1,000 pages (100 events per page). If the feed exceeds this limit, it throws an exception without returning a partial feed, so neither import nor cleanup proceeds. The API currently returns published, upcoming events with their course information, images, location, and effective schedule. Entries are matched by the configured HZT ID field, within the configured section and entry type. New entries are enabled; existing entries retain their enabled state. Unmapped fields remain untouched. Entry queries use Craft's current site, which is normally the primary site in the CLI.
 
 Schedule the command using the consuming project's scheduler or cron. The interval determines how quickly website content reflects API changes.
 
@@ -84,12 +84,12 @@ Cleanup is a separate command. It fetches all API pages successfully before dele
 
 ## Participant registration
 
-Submit forms to `hzt/push/participant` with the HZT event ID and the API's participant fields. Use `csrfInput()` and `redirectInput()` so Craft can validate the submission and success redirect. API credentials stay on the server.
+Submit forms to `hzt/participants/register` with the HZT event ID and the API's participant fields. This replaces `hzt/push/participant`; update existing form actions when upgrading. Use `csrfInput()` and `redirectInput()` so Craft can validate the submission and success redirect. API credentials stay on the server.
 
 ```twig
 <form method="post">
     {{ csrfInput() }}
-    {{ actionInput('hzt/push/participant') }}
+    {{ actionInput('hzt/participants/register') }}
     {{ redirectInput('registration/thanks') }}
     {{ hiddenInput('event_id', entry.hztEventId) }}
 

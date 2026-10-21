@@ -14,16 +14,16 @@ use yii\web\Response;
 /**
  * Forward CSRF-protected website registrations to HZT.
  */
-class PushController extends Controller
+class ParticipantsController extends Controller
 {
-    protected array|bool|int $allowAnonymous = ['participant'];
+    protected array|bool|int $allowAnonymous = ['register'];
 
     /**
      * Register a participant and return API validation errors to the form.
      *
      * @return Response|null
      */
-    public function actionParticipant(): ?Response
+    public function actionRegister(): ?Response
     {
         $this->requirePostRequest();
 
@@ -45,8 +45,10 @@ class PushController extends Controller
                 $data = Json::decode((string) $response->getBody());
                 $error = $data['message'];
                 $errors = $data['errors'];
-            } else {
+            } elseif (in_array($statusCode, [404, 429], true)) {
                 Craft::warning('HZT registration request failed (HTTP '.($statusCode ?? 'unavailable').').', __METHOD__);
+            } else {
+                Craft::error('HZT registration request failed (HTTP '.($statusCode ?? 'unavailable').').', __METHOD__);
             }
 
             if ($this->request->getAcceptsJson()) {
