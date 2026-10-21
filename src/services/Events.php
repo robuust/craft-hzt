@@ -22,9 +22,16 @@ use yii\base\InvalidConfigException;
  */
 class Events extends Component
 {
+    private const MAX_PAGES = 1000;
+
     private Settings $settings;
     private Section $section;
     private EntryType $entryType;
+
+    /**
+     * @var array<int, array<string, int>> asset IDs indexed by folder and content hash
+     */
+    private array $imageAssetIdsByFolder = [];
 
     /**
      * Resolve the configured section and entry type when the importer is used.
@@ -62,6 +69,10 @@ class Events extends Component
         $page = 1;
 
         do {
+            if ($page > self::MAX_PAGES) {
+                throw new RuntimeException('The HZT event feed exceeds the limit of '.self::MAX_PAGES.' pages.');
+            }
+
             $response = Plugin::getInstance()->api->request('GET', 'events', [
                 'query' => ['page' => $page, 'per_page' => 100],
             ]);
@@ -170,7 +181,7 @@ class Events extends Component
     }
 
     /**
-     * Import course images, reusing attached assets with identical contents.
+     * Import course images, reusing identical attached assets or upload-folder assets.
      *
      * @param Entry                      $entry
      * @param list<array<string, mixed>> $images
@@ -185,26 +196,44 @@ class Events extends Component
             throw new InvalidConfigException('The HZT imagesField must refer to an Assets field on the configured entry type.');
         }
 
-        $currentAssets = $entry->{$this->settings->imagesField}->all();
+        if ($images === []) {
+            return [];
+        }
+
+        $folderId = $field->resolveDynamicPathToFolderId($entry);
+        $folder = Craft::$app->getAssets()->getFolderById($folderId);
+
+        if (!isset($this->imageAssetIdsByFolder[$folderId])) {
+            $this->imageAssetIdsByFolder[$folderId] = [];
+
+            foreach (Asset::find()->folderId($folderId)->status(null)->all() as $asset) {
+                $hash = hash('sha256', $asset->getContents());
+                $this->imageAssetIdsByFolder[$folderId][$hash] ??= $asset->id;
+            }
+        }
+
+        $assetsByHash = $this->imageAssetIdsByFolder[$folderId];
+
+        foreach ($entry->{$this->settings->imagesField}->all() as $asset) {
+            $assetsByHash[hash('sha256', $asset->getContents())] = $asset->id;
+        }
+
         $client = Craft::createGuzzleClient(['connect_timeout' => 10, 'timeout' => 30]);
         $assetIds = [];
 
         foreach ($images as $image) {
             $content = (string) $client->get($image['url'])->getBody();
+            $hash = hash('sha256', $content);
 
-            foreach ($currentAssets as $asset) {
-                if ($asset->getContents() === $content) {
-                    $assetIds[] = $asset->id;
-                    continue 2;
-                }
+            if (isset($assetsByHash[$hash])) {
+                $assetIds[$hash] = $assetsByHash[$hash];
+                continue;
             }
 
             $tempPath = AssetsHelper::tempFilePath(pathinfo($image['file_name'], PATHINFO_EXTENSION));
 
             try {
                 FileHelper::writeToFile($tempPath, $content);
-                $folderId = $field->resolveDynamicPathToFolderId($entry);
-                $folder = Craft::$app->getAssets()->getFolderById($folderId);
                 $asset = new Asset();
                 $asset->tempFilePath = $tempPath;
                 $asset->setFilename($image['file_name']);
@@ -217,12 +246,14 @@ class Events extends Component
                     throw new RuntimeException('Could not save HZT image: '.Json::encode($asset->getErrors()));
                 }
 
-                $assetIds[] = $asset->id;
+                $assetsByHash[$hash] = $asset->id;
+                $this->imageAssetIdsByFolder[$folderId][$hash] = $asset->id;
+                $assetIds[$hash] = $asset->id;
             } finally {
                 FileHelper::unlink($tempPath);
             }
         }
 
-        return $assetIds;
+        return array_values($assetIds);
     }
 }
