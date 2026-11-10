@@ -152,13 +152,3 @@ $result = $plugin->participants->createParticipant($eventId, $participantFields)
 ```
 
 Access tokens are cached separately by host and client credentials, expire shortly before the API's `expires_in`, and are renewed once after an API 401 response. API redirects are rejected to keep credentials on the configured host. Import failures stop the command; cleanup is never run implicitly.
-
-## Tests
-
-Install the plugin's Composer dependencies and make PHPUnit 13.4 available, then run:
-
-```sh
-phpunit --no-configuration --bootstrap tests/bootstrap.php tests
-```
-
-The import tests use the real Craft/Yii locale formatter and isolate entry lookup and persistence. To use a separate Craft dependency installation, set `CRAFT_HZT_VENDOR_AUTOLOAD` to its `vendor/autoload.php` path.
