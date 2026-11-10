@@ -39,7 +39,9 @@ return [
     'eventIdField' => 'hztEventId', // Number
     'imagesField' => 'images', // Optional Assets field; omit to skip image import
     'fieldMapping' => [
-        // Craft field handle => API response path
+        // Craft field handle => API response path or derived schedule
+        'course_name' => 'course.name',
+        'schedule' => 'schedule',
         'short_description' => 'course.short_description',
         'description' => 'course.description',
         'video_url' => 'course.video_url',
@@ -59,6 +61,8 @@ return [
 Use your actual section, entry type, and field handles. The plugin does not create sections, fields, or volumes. Only mapped fields are updated; the entry title always uses the event's `name`, and `eventIdField` always uses its `id`.
 
 Mappings support dot-separated API paths and preserve the API values, including nulls, booleans, arrays, and ISO dates. Choose compatible field types: Date fields for dates, Lightswitch for `is_continuous`, Number for counts, and text fields for descriptions, URLs, and location text. The API's `start_time` and `end_time` are time-only strings; map them to Plain Text fields. Nullable values need optional fields. When mapping an entire object or array, its structure must match the destination field's input format.
+
+Map `course.name` to a Plain Text field to import the linked course's name alongside the calendar entry title. The plugin also provides a derived `schedule` value for a Plain Text field. Continuous events use the start date's weekday, for example `Elke dinsdag, van 09:00 tot 10:00`. Other events use their effective start date, for example `10 november 2026, van 09:00 tot 10:00`. The time range is omitted when either effective time is unset. Schedule text always uses Dutch formatting and preserves the API's calendar date and local times without timezone conversion. Raw API mappings remain unchanged.
 
 When `imagesField` is configured, course images are downloaded into that Assets field's configured upload location. Images are matched by a SHA-256 hash of their contents against attached assets and existing assets in the same upload folder, including assets no longer attached to an entry. Duplicate images in one response are linked only once, and entries using the same upload folder can share assets. Existing upload-folder assets are indexed once per importer service instance; newly imported assets are added immediately. Old assets are unlinked when removed from the API response; their files remain in the volume. Existing duplicate assets are not deleted.
 
