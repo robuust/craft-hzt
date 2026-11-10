@@ -38,6 +38,7 @@ return [
     'entryTypeHandle' => 'event',
     'eventIdField' => 'hztEventId', // Number
     'imagesField' => 'images', // Optional Assets field; omit to skip image import
+    'brochureField' => 'brochure', // Optional Assets field; omit to skip PDF import
     'fieldMapping' => [
         // Craft field handle => API response path or derived schedule
         'course_name' => 'course.name',
@@ -64,7 +65,9 @@ Mappings support dot-separated API paths and preserve the API values, including 
 
 Map `course.name` to a Plain Text field to import the linked course's name alongside the calendar entry title. The plugin also provides a derived `schedule` value for a Plain Text field. Continuous events use the start date's weekday, for example `Elke dinsdag, van 09:00 tot 10:00`. Other events use their effective start date, for example `10 november 2026, van 09:00 tot 10:00`. The time range is omitted when either effective time is unset. Schedule text always uses Dutch formatting and preserves the API's calendar date and local times without timezone conversion. Raw API mappings remain unchanged.
 
-When `imagesField` is configured, course images are downloaded into that Assets field's configured upload location. Images are matched by a SHA-256 hash of their contents against attached assets and existing assets in the same upload folder, including assets no longer attached to an entry. Duplicate images in one response are linked only once, and entries using the same upload folder can share assets. Existing upload-folder assets are indexed once per importer service instance; newly imported assets are added immediately. Old assets are unlinked when removed from the API response; their files remain in the volume. Existing duplicate assets are not deleted.
+Configure `brochureField` with an optional Assets field that allows PDF files and has an asset limit of 1 to import the optional `course.brochure` PDF. The next import replaces the linked brochure when its contents change and clears the field when the API returns null.
+
+When `imagesField` or `brochureField` is configured, the corresponding course files are downloaded into each Assets field's configured upload location. Files are matched by a SHA-256 hash of their contents against attached assets and existing assets in the same upload folder, including assets no longer attached to an entry. Duplicate files in one response are linked only once, and entries using the same upload folder can share assets. Existing upload-folder assets are indexed once per importer service instance; newly imported assets are added immediately. Old assets are unlinked when replaced or removed from the API response; their files remain in the volume. Existing duplicate assets are not deleted.
 
 Settings use Craft's standard [plugin configuration](https://craftcms.com/docs/5.x/extend/plugin-settings.html).
 

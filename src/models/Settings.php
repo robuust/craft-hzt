@@ -17,6 +17,7 @@ class Settings extends Model
     public string $entryTypeHandle = '';
     public string $eventIdField = '';
     public string $imagesField = '';
+    public string $brochureField = '';
 
     /**
      * @var array<string, string> craft field handles mapped to API paths
