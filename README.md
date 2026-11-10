@@ -46,12 +46,14 @@ return [
         'short_description' => 'course.short_description',
         'description' => 'course.description',
         'video_url' => 'course.video_url',
+        'brochure_url' => 'course.brochure.url',
         'start_date' => 'start_date',
         'end_date' => 'end_date',
         'start_time' => 'start_time',
         'end_time' => 'end_time',
         'is_continuous' => 'is_continuous',
         'max_participants' => 'max_participants',
+        'participant_count' => 'participant_count',
         'meetings_count' => 'meetings_count',
         'location_name' => 'location.display_name',
         'location_address' => 'location.address',
@@ -61,11 +63,19 @@ return [
 
 Use your actual section, entry type, and field handles. The plugin does not create sections, fields, or volumes. Only mapped fields are updated; the entry title always uses the event's `name`, and `eventIdField` always uses its `id`.
 
-Mappings support dot-separated API paths and preserve the API values, including nulls, booleans, arrays, and ISO dates. Choose compatible field types: Date fields for dates, Lightswitch for `is_continuous`, Number for counts, and text fields for descriptions, URLs, and location text. The API's `start_time` and `end_time` are time-only strings; map them to Plain Text fields. Nullable values need optional fields. When mapping an entire object or array, its structure must match the destination field's input format.
+Mappings support dot-separated API paths and preserve the API values, including nulls, booleans, arrays, and ISO dates. A path through a null value also maps to null. Choose compatible field types: Date fields for dates, Lightswitch for `is_continuous`, Number for counts, and text fields for descriptions, URLs, and location text. The API's `start_time` and `end_time` are time-only strings; map them to Plain Text fields. Nullable values need optional fields. When mapping an entire object or array, its structure must match the destination field's input format.
+
+Map `max_participants` and `participant_count` to Number fields. `participant_count` counts active registrations, including new and confirmed registrations; refused, unregistered, and anonymized participants do not occupy a place. The count is 0 when there are no active registrations. `max_participants` is null when there is no limit. With the example field handles, check capacity in Twig using:
+
+```twig
+{% set isFull = entry.max_participants is not null and entry.participant_count >= entry.max_participants %}
+```
+
+These stored values reflect the latest import. The API checks current capacity again when a registration is submitted.
+
+The optional PDF brochure is returned as `course.brochure`, with media metadata including `id`, `name`, `file_name`, `mime_type`, `size`, and `url`. It is null when no brochure is attached. Map `course.brochure.url` to an optional Plain Text field such as `brochure_url` to store the download URL; a missing or removed brochure clears that field on the next import. This mapping stores only the remote URL. To download the PDF into Craft Assets, configure `brochureField` with an optional Assets field that allows PDF files and has an asset limit of 1. The next import replaces the linked brochure when its contents change and clears the field when the API returns null.
 
 Map `course.name` to a Plain Text field to import the linked course's name alongside the calendar entry title. The plugin also provides a derived `schedule` value for a Plain Text field. Continuous events use the start date's weekday, for example `Elke dinsdag, van 09:00 tot 10:00`. Other events use their effective start date, for example `10 november 2026, van 09:00 tot 10:00`. The time range is omitted when either effective time is unset. Schedule text always uses Dutch formatting and preserves the API's calendar date and local times without timezone conversion. Raw API mappings remain unchanged.
-
-Configure `brochureField` with an optional Assets field that allows PDF files and has an asset limit of 1 to import the optional `course.brochure` PDF. The next import replaces the linked brochure when its contents change and clears the field when the API returns null.
 
 When `imagesField` or `brochureField` is configured, the corresponding course files are downloaded into each Assets field's configured upload location. Files are matched by a SHA-256 hash of their contents against attached assets and existing assets in the same upload folder, including assets no longer attached to an entry. Duplicate files in one response are linked only once, and entries using the same upload folder can share assets. Existing upload-folder assets are indexed once per importer service instance; newly imported assets are added immediately. Old assets are unlinked when replaced or removed from the API response; their files remain in the volume. Existing duplicate assets are not deleted.
 
@@ -77,7 +87,7 @@ Settings use Craft's standard [plugin configuration](https://craftcms.com/docs/5
 php craft hzt/import
 ```
 
-The importer fetches all pages from `GET /api/v1/events` before saving entries, with a hard limit of 1,000 pages (100 events per page). If the feed exceeds this limit, it throws an exception without returning a partial feed, so neither import nor cleanup proceeds. The API currently returns published, upcoming events with their course information, images, location, and effective schedule. Entries are matched by the configured HZT ID field, within the configured section and entry type. New entries are enabled; existing entries retain their enabled state. Unmapped fields remain untouched. Entry queries use Craft's current site, which is normally the primary site in the CLI.
+The importer fetches all pages from `GET /api/v1/events` before saving entries, with a hard limit of 1,000 pages (100 events per page). If the feed exceeds this limit, it throws an exception without returning a partial feed, so neither import nor cleanup proceeds. The API currently returns published, upcoming events with their course information, images, optional brochure, participant count and limit, location, and effective schedule. Entries are matched by the configured HZT ID field, within the configured section and entry type. New entries are enabled; existing entries retain their enabled state. Unmapped fields remain untouched. Entry queries use Craft's current site, which is normally the primary site in the CLI.
 
 Schedule the command using the consuming project's scheduler or cron. The interval determines how quickly website content reflects API changes.
 
