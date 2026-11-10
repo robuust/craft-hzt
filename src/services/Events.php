@@ -113,7 +113,7 @@ class Events extends Component
     }
 
     /**
-     * Create or update an entry using the configured API-to-field mapping.
+     * Create or update an entry using the configured API-to-field mapping, preserving nullable nested values.
      *
      * @param array<string, mixed> $event
      *
@@ -137,6 +137,10 @@ class Events extends Component
             $value = $event;
 
             foreach (explode('.', $path) as $segment) {
+                if ($value === null) {
+                    break;
+                }
+
                 $value = $value[$segment];
             }
 
