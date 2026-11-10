@@ -31,7 +31,7 @@ class Events extends Component
     /**
      * @var array<int, array<string, int>> asset IDs indexed by folder and content hash
      */
-    private array $imageAssetIdsByFolder = [];
+    private array $assetIdsByFolder = [];
 
     /**
      * Resolve the configured section and entry type when the importer is used.
@@ -150,10 +150,17 @@ class Events extends Component
         }
 
         if ($this->settings->imagesField !== '') {
-            $entry->setFieldValue($this->settings->imagesField, $this->importImages($entry, $event['course']['images']));
+            $entry->setFieldValue($this->settings->imagesField, $this->importAssets($entry, $this->settings->imagesField, $event['course']['images']));
+        }
 
+        if ($this->settings->brochureField !== '') {
+            $brochure = $event['course']['brochure'];
+            $entry->setFieldValue($this->settings->brochureField, $this->importAssets($entry, $this->settings->brochureField, $brochure === null ? [] : [$brochure]));
+        }
+
+        if ($this->settings->imagesField !== '' || $this->settings->brochureField !== '') {
             if (!Craft::$app->getElements()->saveElement($entry)) {
-                throw new RuntimeException('Could not save images for HZT event '.$event['id'].': '.Json::encode($entry->getErrors()));
+                throw new RuntimeException('Could not save assets for HZT event '.$event['id'].': '.Json::encode($entry->getErrors()));
             }
         }
 
@@ -204,48 +211,49 @@ class Events extends Component
     }
 
     /**
-     * Import course images, reusing identical attached assets or upload-folder assets.
+     * Import course files, reusing identical attached assets or upload-folder assets.
      *
      * @param Entry                      $entry
-     * @param list<array<string, mixed>> $images
+     * @param string                     $fieldHandle
+     * @param list<array<string, mixed>> $files
      *
      * @return list<int>
      */
-    private function importImages(Entry $entry, array $images): array
+    private function importAssets(Entry $entry, string $fieldHandle, array $files): array
     {
-        $field = $entry->getFieldLayout()->getFieldByHandle($this->settings->imagesField);
+        $field = $entry->getFieldLayout()->getFieldByHandle($fieldHandle);
 
         if (!$field instanceof Assets) {
-            throw new InvalidConfigException('The HZT imagesField must refer to an Assets field on the configured entry type.');
+            throw new InvalidConfigException('The HZT field "'.$fieldHandle.'" must refer to an Assets field on the configured entry type.');
         }
 
-        if ($images === []) {
+        if ($files === []) {
             return [];
         }
 
         $folderId = $field->resolveDynamicPathToFolderId($entry);
         $folder = Craft::$app->getAssets()->getFolderById($folderId);
 
-        if (!isset($this->imageAssetIdsByFolder[$folderId])) {
-            $this->imageAssetIdsByFolder[$folderId] = [];
+        if (!isset($this->assetIdsByFolder[$folderId])) {
+            $this->assetIdsByFolder[$folderId] = [];
 
             foreach (Asset::find()->folderId($folderId)->status(null)->all() as $asset) {
                 $hash = hash('sha256', $asset->getContents());
-                $this->imageAssetIdsByFolder[$folderId][$hash] ??= $asset->id;
+                $this->assetIdsByFolder[$folderId][$hash] ??= $asset->id;
             }
         }
 
-        $assetsByHash = $this->imageAssetIdsByFolder[$folderId];
+        $assetsByHash = $this->assetIdsByFolder[$folderId];
 
-        foreach ($entry->{$this->settings->imagesField}->all() as $asset) {
+        foreach ($entry->{$fieldHandle}->all() as $asset) {
             $assetsByHash[hash('sha256', $asset->getContents())] = $asset->id;
         }
 
         $client = Craft::createGuzzleClient(['connect_timeout' => 10, 'timeout' => 30]);
         $assetIds = [];
 
-        foreach ($images as $image) {
-            $content = (string) $client->get($image['url'])->getBody();
+        foreach ($files as $file) {
+            $content = (string) $client->get($file['url'])->getBody();
             $hash = hash('sha256', $content);
 
             if (isset($assetsByHash[$hash])) {
@@ -253,24 +261,24 @@ class Events extends Component
                 continue;
             }
 
-            $tempPath = AssetsHelper::tempFilePath(pathinfo($image['file_name'], PATHINFO_EXTENSION));
+            $tempPath = AssetsHelper::tempFilePath(pathinfo($file['file_name'], PATHINFO_EXTENSION));
 
             try {
                 FileHelper::writeToFile($tempPath, $content);
                 $asset = new Asset();
                 $asset->tempFilePath = $tempPath;
-                $asset->setFilename($image['file_name']);
+                $asset->setFilename($file['file_name']);
                 $asset->newFolderId = $folderId;
                 $asset->setVolumeId($folder->volumeId);
                 $asset->avoidFilenameConflicts = true;
                 $asset->setScenario(Asset::SCENARIO_CREATE);
 
                 if (!Craft::$app->getElements()->saveElement($asset)) {
-                    throw new RuntimeException('Could not save HZT image: '.Json::encode($asset->getErrors()));
+                    throw new RuntimeException('Could not save HZT asset: '.Json::encode($asset->getErrors()));
                 }
 
                 $assetsByHash[$hash] = $asset->id;
-                $this->imageAssetIdsByFolder[$folderId][$hash] = $asset->id;
+                $this->assetIdsByFolder[$folderId][$hash] = $asset->id;
                 $assetIds[$hash] = $asset->id;
             } finally {
                 FileHelper::unlink($tempPath);
