@@ -131,6 +131,7 @@ class Events extends Component
         }
 
         $entry->title = $event['name'];
+        $event['schedule'] = $this->formatSchedule($event);
 
         foreach ($this->settings->fieldMapping as $handle => $path) {
             $value = $event;
@@ -178,6 +179,28 @@ class Events extends Component
         }
 
         return true;
+    }
+
+    /**
+     * Format the effective schedule in Dutch without shifting its calendar date or times.
+     *
+     * @param array<string, mixed> $event
+     *
+     * @return string
+     */
+    private function formatSchedule(array $event): string
+    {
+        $formatter = Craft::$app->getI18n()->getLocaleById('nl-NL')->getFormatter();
+        $date = substr($event['start_date'], 0, 10);
+        $schedule = $event['is_continuous']
+            ? 'Elke '.$formatter->asDate($date, 'EEEE')
+            : $formatter->asDate($date, 'd MMMM y');
+
+        if ($event['start_time'] !== null && $event['end_time'] !== null) {
+            $schedule .= ', van '.substr($event['start_time'], 0, 5).' tot '.substr($event['end_time'], 0, 5);
+        }
+
+        return $schedule;
     }
 
     /**
